@@ -1,5 +1,4 @@
 import random
-import numpy as np
 
 def bot_strategy_80_20 (player, current_rank) :
     if current_rank != "Open" :
@@ -74,7 +73,6 @@ def bot_strategy_80_20 (player, current_rank) :
 
         # Define announcing card based in the most commun rank
         new_announced_rank = most_commun_rank
-        print(f"----{most_commun_rank}: {max_value}----")
 
         # Winning play if their is only one last rank
         if number_of_ranks == 1 :
@@ -188,7 +186,6 @@ def bot_strategy_one_third (player, current_rank) :
 
         # Define announcing card based in the most commun rank
         new_announced_rank = most_commun_rank
-        print(f"----{most_commun_rank}: {max_value}----")
 
         # Winning play if their is only one last rank
         if number_of_ranks == 1 :

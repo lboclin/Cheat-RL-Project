@@ -1,7 +1,6 @@
 from .card import Card, Suit
 from .deck import Deck
 from .player import Player
-import random
 import numpy as np
 
 
@@ -68,7 +67,45 @@ class CheatEnviroment:
         ]).astype(np.float32)
         
         return state_vector 
+    
+
+
+    def get_valid_actions(self):
+        """
+        Analyzes the current game state and returns a dictionary of legal actions
+        for the current player. This is crucial for the agent's action masking.
+        """
+        valid_actions = {
+            "types": [],
+            "ranks": [],
+            "quantities": [],
+            "is_starter": False,
+            "current_rank": self.current_rank_to_play,
+            "player_hand": self.players[self.current_player_index].hand
+        }
         
+        current_player = self.players[self.current_player_index]
+        is_starter = (self.starter_player_index == self.current_player_index)
+        valid_actions["is_starter"] = is_starter
+
+        # --- Determine valid action types ---
+        if is_starter:
+            valid_actions["types"].append(2) # Must play
+        else:
+            valid_actions["types"] = [0, 1, 2]
+
+        # --- Determine valid ranks and quantities for a 'Play' action ---
+        # Agent can always announce any rank if it's the starter
+        if is_starter:
+            valid_actions["ranks"] = ["Ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King"]
+        
+        # Agent can play from 1 up to the number of cards in their hand (capped at 6)
+        max_qty = min(len(current_player.hand), 6)
+        if max_qty > 0:
+            valid_actions["quantities"] = list(range(max_qty)) # 0-5, which corresponds to 1-6 cards
+
+        return valid_actions
+
 
 
     def _deal_cards(self):

@@ -1,8 +1,7 @@
-# main.py
-
 import random
-from environment import CheatEnviroment
-from bots import bot_strategy_80_20, bot_strategy_one_third # Import the bot's strategy functions
+from cheat_env.environment import CheatEnviroment
+from agents.bots import bot_strategy_80_20, bot_strategy_one_third
+from agents.rl_agent import RLAgent
 
 def main():
     """
@@ -11,8 +10,12 @@ def main():
     """
     # --- 1. GAME SETUP ---
     # Create the game with 3 bot players.
-    player_names = ["Bot_Agressive", "Bot_B", "Bot_C"]
+    player_names = ["RL_Agent", "Bot_103", "Bot_8020"]
     env = CheatEnviroment(players_names=player_names)
+
+    # Initialize the agent
+    state_size = len(env.reset())
+    agent = RLAgent(input_size=state_size)
 
     # --- 2. GAME START (EPISODE) ---
     state = env.reset()
@@ -20,7 +23,7 @@ def main():
     turn_count = 1
     max_turns = 250 # A safety limit to prevent infinite loops during testing
 
-    # --- NEW: Define card values map for printing ---
+    # --- Define card values map for printing ---
     card_values = ["Joker", "Ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King"]
     value_to_index = {value: i for i, value in enumerate(card_values)}
 
@@ -48,11 +51,15 @@ def main():
         print(f"Rank to Play: '{env.current_rank_to_play}' | Cards in Pile: {len(env.round_discard_pile)}")
         
         # --- ACTION DECISION ---
-        # The bot's strategy function is called to decide the action.
-        if current_player.name == "Bot_Agressive" :
-            action = bot_strategy_one_third(current_player, env.current_rank_to_play)
-        else :
-            action = bot_strategy_80_20(current_player, env.current_rank_to_play)
+        action = None
+        if current_player is env.rl_agent:
+            valid_actions = env.get_valid_actions()
+            action = agent.choose_action(state, valid_actions, current_player.hand)
+        else:
+            if current_player.name == "Bot_8020":
+                action = bot_strategy_80_20(current_player, env.current_rank_to_play)
+            else:
+                action = bot_strategy_one_third(current_player, env.current_rank_to_play)
         
         action_type, cards, rank = action
         print(f"Action chosen by {current_player.name}: Type={action_type}, Cards={cards}, Rank='{rank}'")
@@ -66,13 +73,11 @@ def main():
     # --- 4. END OF GAME ---
     print("\n" + "=" * 30)
     if terminated:
-        # Use the 'winner' attribute to announce the winner
         print(f"GAME OVER! The winner is: {env.winner.name}")
     else:
         print(f"GAME OVER! Reached the limit of {max_turns} turns.")
     print("=" * 30)
 
 
-# Standard Python pattern to run the main function
 if __name__ == "__main__":
     main()

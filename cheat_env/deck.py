@@ -1,4 +1,4 @@
-from card import Card, Suit
+from .card import Card, Suit
 import random
 
 class Deck:
