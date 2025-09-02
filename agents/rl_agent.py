@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 import random
 import numpy as np
 from .q_network import Q_Network
+from .replay_memory import ReplayMemory, Transition
 
 class RLAgent:
     """
@@ -26,17 +29,17 @@ class RLAgent:
         self.card_values = ["Joker", "Ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King"]
         self.rank_to_index = {value: i for i, value in enumerate(self.card_values)}
 
-        # Initialize the two Q-Networks for DQN
+        # --- DQN ARCHITECTURE ---
         self.policy_net = Q_Network(input_size)
         self.target_net = Q_Network(input_size)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        # Placeholders for optimizer and replay memory
-        # self.optimizer = ...
-        # self.memory = ...
+        # --- LEARNING COMPONENTS ---
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=0.0001)
+        self.memory = ReplayMemory(10000)
 
-    def choose_action(self, state: np.ndarray, valid_actions: dict, player_hand: list) -> tuple:
+    def choose_action(self, state: np.ndarray, valid_actions: dict) -> tuple:
         """
         Selects an action based on the current state using an epsilon-greedy and
         hierarchical decision process.
@@ -44,11 +47,12 @@ class RLAgent:
         Args:
             state (np.ndarray): The current state vector from the environment.
             valid_actions (dict): A dictionary detailing legal actions.
-            player_hand (list): The list of Card objects in the current player's hand.
         
         Returns:
             tuple: The structured action (action_type, cards_to_play, announced_rank).
         """
+        player_hand = valid_actions["player_hand"]
+
         # Epsilon-greedy exploration
         if random.random() < self.epsilon:
             return self._choose_random_valid_action(valid_actions, player_hand)
@@ -145,3 +149,90 @@ class RLAgent:
                 cards_to_play = random.sample(player_hand, k=quantity)
 
         return (action_type, cards_to_play, announced_rank)
+    
+    def learn(self, batch_size: int):
+        """
+        Performs one step of the optimization process. It samples a batch from
+        memory and uses it to update the policy network's weights based on the
+        multi-head outputs.
+        """
+        if len(self.memory) < batch_size:
+            return
+
+        # 1. SAMPLE BATCH
+        transitions = self.memory.sample(batch_size)
+        batch = Transition(*zip(*transitions))
+
+        # 2. CONVERT TO TENSORS
+        state_batch = torch.tensor(np.array(batch.state), dtype=torch.float32)
+        next_state_batch = torch.tensor(np.array(batch.next_state), dtype=torch.float32)
+        reward_batch = torch.tensor(batch.reward, dtype=torch.float32)
+        done_batch = torch.tensor(batch.done, dtype=torch.bool)
+
+        # --- 3. UNPACK THE COMPLEX ACTION BATCH ---
+        # Unpack all components of the action tuple for the entire batch
+        action_types = torch.tensor([a[0] for a in batch.action], dtype=torch.int64).view(-1, 1)
+        
+        # For play-specific actions, we use a placeholder (-1) if the action was not 'play'
+        # Note: announced_rank for non-starters is fixed, so we primarily learn the starter's choice
+        announced_ranks_idx = []
+        quantities_idx = []
+        for action_tuple in batch.action:
+            action_type, cards, rank = action_tuple
+            if action_type == 2: # Is a 'play' action
+                # Convert rank name to index. We assume Joker (index 0) is not a valid claim.
+                # The network outputs 13 ranks (Ace-King), so we map them to 0-12.
+                # self.rank_to_index['Ace'] is 1, so we subtract 1.
+                announced_ranks_idx.append(self.rank_to_index.get(rank, 1) - 1)
+                
+                # Quantity is 1-6, network output is 0-5. So we subtract 1.
+                quantities_idx.append(len(cards) - 1 if cards else 0)
+            else:
+                announced_ranks_idx.append(-1) # Placeholder
+                quantities_idx.append(-1)    # Placeholder
+
+        announced_ranks_idx = torch.tensor(announced_ranks_idx, dtype=torch.int64).view(-1, 1)
+        quantities_idx = torch.tensor(quantities_idx, dtype=torch.int64).view(-1, 1)
+
+        # --- 4. CALCULATE TD TARGET (Same as before) ---
+        with torch.no_grad():
+            next_q_values_dict = self.target_net(next_state_batch)
+            max_next_q_values = next_q_values_dict["action_type"].max(1)[0]
+            target_q_values = reward_batch + (0.99 * max_next_q_values * ~done_batch) # Assuming gamma=0.99
+
+        # --- 5. CALCULATE HIERARCHICAL LOSS ---
+        
+        # Get all Q-value predictions from the policy network
+        q_values_dict = self.policy_net(state_batch)
+        
+        # a) Loss for Action Type (always calculated)
+        predicted_q_for_action_type = q_values_dict["action_type"].gather(1, action_types)
+        total_loss = F.smooth_l1_loss(predicted_q_for_action_type, target_q_values.unsqueeze(1))
+
+        # b) Create a mask for 'play' actions
+        play_mask = (action_types == 2).squeeze()
+        
+        # c) Add loss for other heads only for 'play' actions
+        if play_mask.sum() > 0:
+            # Loss for Rank Claim
+            predicted_q_rank = q_values_dict["rank_claim"][play_mask].gather(1, announced_ranks_idx[play_mask])
+            total_loss += F.smooth_l1_loss(predicted_q_rank, target_q_values[play_mask].unsqueeze(1))
+            
+            # Loss for Quantity Claim
+            predicted_q_qty = q_values_dict["quantity_claim"][play_mask].gather(1, quantities_idx[play_mask])
+            total_loss += F.smooth_l1_loss(predicted_q_qty, target_q_values[play_mask].unsqueeze(1))
+            
+            # (Opcional/Avançado) Loss for Rank Selection
+            # Esta cabeça é mais complexa. Uma abordagem é usar MSE loss para incentivar
+            # Q-values mais altos para os ranks das cartas que foram realmente jogadas.
+            # Por simplicidade, vamos manter a loss principal por enquanto.
+
+        # --- 6. BACKPROPAGATION ---
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        self.optimizer.step()
+
+        # Decay epsilon
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+        

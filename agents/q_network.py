@@ -33,9 +33,6 @@ class Q_Network(nn.Module):
         self.action_type_head = nn.Linear(128, 3)     # Outputs Q-values for {Challenge, Pass, Play}
         self.rank_claim_head = nn.Linear(128, 13)    # Outputs Q-values for ranks to announce {Ace..King}
         self.quantity_claim_head = nn.Linear(128, 6) # Outputs Q-values for quantities {1..6}
-        
-        # Head 4 now outputs Q-values for each RANK, representing the utility of using
-        # cards of that rank in the current play. This is key for learning bluffing strategy.
         self.rank_selection_head = nn.Linear(128, 14) # Outputs Q-values for ranks to use {Joker, Ace..King}
 
     def forward(self, state: torch.Tensor) -> dict:

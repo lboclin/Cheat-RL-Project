@@ -6,7 +6,7 @@ import numpy as np
 
 class CheatEnviroment:
 
-    def __init__(self, players_names: list):
+    def __init__(self, players_names: list, max_episode_steps=250):
         if len(players_names) < 2:
             raise ValueError("The game need at least 2 players.")
 
@@ -23,6 +23,8 @@ class CheatEnviroment:
         self.pass_counter = 0
         self.winner = None
         self.starter_player_index = None
+        self.max_episode_steps = max_episode_steps
+        self.turn_count = 1
 
 
 
@@ -53,7 +55,7 @@ class CheatEnviroment:
         discard_pile_size = [len(self.round_discard_pile)]
         if self.starter_player_index == None :
             is_starting_play = [0.0]
-        else :
+        else:
             is_starting_play = [1.0]
 
         
@@ -151,6 +153,7 @@ class CheatEnviroment:
         self.last_number_of_cards_played = None
         self.round_discard_pile = []
         self.pass_counter = 0
+        self.turn_count = 1
 
         # Initialize the first round
         self._start_new_round(self.current_player_index)
@@ -183,16 +186,23 @@ class CheatEnviroment:
             # Play cards
             self._play_cards(acting_player_index, cards_to_play, announced_rank)
         
+        # Atualize the turn counter
+        self.turn_count += 1
 
         # Check if the game has finished
         terminated = self.check_game_over()
 
+
+        truncated = False
+        if not terminated and self.turn_count >= self.max_episode_steps:
+            truncated = True
+            print(f"--- Episode truncated at turn {self.turn_count} ---")
+
         if terminated :
             if reward == 0.0 :
-                winner = self.players[acting_player_index]
-                if winner == self.rl_agent :
+                if self.winner == self.rl_agent:
                     reward = 1.0
-                else :
+                else:
                     reward = -1.0
             
         if not terminated:
@@ -208,7 +218,6 @@ class CheatEnviroment:
 
         # Return the passing result
         state = self._get_state()
-        truncated = False
         info = {}
         return state, reward, terminated, truncated, info
         
