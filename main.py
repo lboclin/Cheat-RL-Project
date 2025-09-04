@@ -131,11 +131,11 @@ def main():
                 'epsilon': agent.epsilon
             }
             torch.save(checkpoint, CHECKPOINT_PATH)
-            print(f"Checkpoint saved in episode {episode}")
+            print(f"Checkpoint saved in episode {episode+1}")
 
     # Save the model for the last time
     torch.save(checkpoint, CHECKPOINT_PATH)
-    print("Trainment finished. Checkpoint saved.")
+    print("Training finished. Checkpoint saved.")
 
     print(winners_vector)
 
