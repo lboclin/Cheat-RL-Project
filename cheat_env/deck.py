@@ -8,11 +8,9 @@ class Deck:
         self.cards = [Card(value, suit) for value in values for suit in suits]
         self.cards.append(Card("Joker", Suit.JOKER))
         self.cards.append(Card("Joker", Suit.JOKER))
-        print("Deck created with 54 cards.")
 
     def shuffle (self):
         random.shuffle(self.cards)
-        print("Deck shuffled.")
 
     def get_card(self):
         if len(self.cards) != 0:
