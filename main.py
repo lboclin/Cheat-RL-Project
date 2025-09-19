@@ -13,11 +13,11 @@ def main():
     # --- 1. TRAINING AND LOGGING SETUP ---
     player_names = ["RL_Agent", "Bot_1", "Bot_2"]
     max_turns = 250
-    num_episodes = 50000  # Total episodes to run
+    num_episodes = 50001  # Total episodes to run
     BATCH_SIZE = 128
     LOG_INTERVAL = 500    # How often to save win rate data (in episodes)
     CHECKPOINT_INTERVAL = 500 # How often to save the model checkpoint
-    VISUALIZE_GAMES = False
+    VISUALIZE_GAMES = True
 
     # --- Bot Strategy Pool and Naming ---
     # This maps the bot function to a clean name for logging.
@@ -64,7 +64,7 @@ def main():
             with open(log_file_path, 'r') as f:
                 reader = csv.reader(f)
                 next(reader) # Skip header
-                win_log_history = [[int(row[0])] + [int(c) for c in row[1:]] for row in reader]
+                win_log_history = [[float(row[0])] + [float(c) for c in row[1:]] for row in reader]
             print(f"Loaded {len(win_log_history)} records from win_log.csv")
 
     else:
